@@ -1,2 +1,2 @@
 # OYIN-Musa-car_parking
-jh guy
+Bul qarekennin qarapaym oyini
