@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAR PARKING PRO</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#10151d;color:white;font-family:Arial,sans-serif;overflow:hidden}
+header{height:65px;background:#171f2b;display:flex;align-items:center;justify-content:space-around;border-bottom:2px solid #2b394a}
+.logo{font-size:23px;font-weight:900;color:#00eaff}
+.stats{display:flex;gap:20px;font-weight:bold;font-size:14px}
+.stats span{color:#00eaff}
+#game{display:block;width:100%;height:calc(100vh - 65px)}
+#message{position:absolute;top:85px;left:50%;transform:translateX(-50%);background:#111e;padding:12px 25px;border-radius:12px;text-align:center;pointer-events:none;font-weight:bold;white-space:nowrap}
+#controls{position:absolute;bottom:18px;left:20px;right:20px;display:flex;justify-content:space-between;pointer-events:none}
+.pad{display:grid;grid-template-columns:55px 55px 55px;gap:5px}
+button{border:1px solid #00d9ff;background:#162b3b;color:white;border-radius:12px;font-size:22px;font-weight:bold;width:55px;height:50px;cursor:pointer;touch-action:none}
+button:active{background:#00a9d0}
+.pad button{pointer-events:auto}
+#pedals{display:flex;gap:10px;align-items:end}
+#pedals button{width:75px;height:65px;font-size:13px}
+#start{position:absolute;inset:65px 0 0;background:rgba(5,12,24,.94);display:flex;justify-content:center;align-items:center;z-index:5}
+.panel{background:#182638;border:2px solid #00d9ff;border-radius:22px;padding:30px;text-align:center;width:min(90%,430px);box-shadow:0 0 35px #00cfff44}
+.panel h1{color:#00eaff;font-size:32px}
+.panel p{color:#bdc9d8;line-height:1.6}
+.panel button{width:auto;height:auto;padding:15px 35px;background:#00bfe5;color:#06131b;font-size:18px}
+#start.hidden{display:none}
+@media(max-width:600px){.stats{gap:7px;font-size:11px}.logo{font-size:16px}header{height:55px}#game{height:calc(100vh - 55px)}#start{inset:55px 0 0}}
+</style>
+</head>
+<body>
+<header>
+ <div class="logo">🚘 CAR PARKING PRO</div>
+ <div class="stats">
+  <div>LEVEL: <span id="level">1</span></div>
+  <div>BALL: <span id="score">0</span></div>
+  <div>VAQT: <span id="time">0</span>s</div>
+ </div>
+</header>
+<canvas id="game"></canvas>
+<div id="message">🚗 Mashinani sariq joyga parkovka qil!</div>
+<div id="controls">
+ <div class="pad">
+  <div></div><button data-key="ArrowUp">▲</button><div></div>
+  <button data-key="ArrowLeft">◀</button>
+  <button data-key="ArrowDown">▼</button>
+  <button data-key="ArrowRight">▶</button>
+ </div>
+ <div id="pedals"><button data-key=" " style="background:#087e9b">TORMOZ</button></div>
+</div>
+<div id="start">
+ <div class="panel">
+  <h1>🚘 CAR PARKING PRO</h1>
+  <p>Haqiqiy parkovka mahoratingni sinab ko‘r!</p>
+  <p>🚗 Ko‘plab avtomobillar<br>🅿️ 10 ta bosqich<br>⭐ Ball to‘plash<br>🎮 Mashinani boshqarish</p>
+  <p>WASD yoki strelkalar orqali boshqar.</p>
+  <button id="play">O‘YINNI BOSHLASH</button>
+ </div>
+</div>
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+let W=1000,H=650,level=1,score=0,seconds=0,running=false,won=false,last=0,timer=0;
+let keys={},cars=[];
+const player={x:500,y:500,a:-Math.PI/2,speed:0,length:48,width:25,color:"#00dfff"};
+let target={x:500,y:130,w:85,h:145};
+const colors=["#e53935","#2196f3","#f5c542","#a855f7","#eeeeee","#ff8a00","#16c784","#ff4081","#888888","#00bcd4","#d4e157","#795548","#ff5252","#607d8b","#9c27b0","#f06292"];
+function resize(){const r=canvas.getBoundingClientRect();canvas.width=r.width*devicePixelRatio;canvas.height=r.height*devicePixelRatio;W=r.width;H=r.height;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+addEventListener("resize",resize);resize();
+function makeCars(){
+ cars=[];const cols=5,rows=3,cellW=W/cols,cellH=Math.min(130,H*.19);
+ for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+  if(r===2&&c===2)continue;
+  let x=c*cellW+cellW/2,y=95+r*cellH+cellH/2;
+  if(Math.abs(x-target.x)<65&&Math.abs(y-target.y)<90)continue;
+  cars.push({x,y,a:r%2===0?0:Math.PI,color:colors[(r*cols+c)%colors.length],length:45,width:25});
+ }
+ for(let i=0;i<8;i++)cars.push({x:35+Math.random()*(W-70),y:H-100-Math.random()*90,a:0,color:colors[i],length:43,width:24});
+}
+function newLevel(){target.x=W/2+(Math.random()-.5)*W*.35;target.y=105+Math.random()*Math.max(0,H*.18);player.x=W/2;player.y=H-120;player.a=-Math.PI/2;player.speed=0;makeCars()}
+function roundRect(x,y,w,h,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function drawCar(x,y,a,color,len=48,wid=25,isPlayer=false){
+ ctx.save();ctx.translate(x,y);ctx.rotate(a);
+ ctx.fillStyle="#0008";ctx.fillRect(-len/2+3,-wid/2+4,len,wid);
+ ctx.fillStyle="#090d12";
+ for(let s of [-1,1]){ctx.fillRect(-len*.30,s*wid*.38,len*.24,6);ctx.fillRect(len*.30,s*wid*.38,len*.24,6)}
+ roundRect(-len/2,-wid/2,len,wid,7,color);
+ roundRect(-len*.12,-wid*.37,len*.37,wid*.74,5,"#203d55");
+ roundRect(len*.19,-len*.31,len*.18,wid*.62,3,"#8bdcf5");
+ ctx.fillStyle="#fff5a0";ctx.fillRect(len*.43,-wid*.38,4,5);ctx.fillRect(len*.43,wid*.18,4,5);
+ ctx.fillStyle="#ff3030";ctx.fillRect(-len*.48,-wid*.38,4,5);ctx.fillRect(-len*.48,wid*.18,4,5);
+ if(isPlayer){ctx.strokeStyle="#00efff";ctx.lineWidth=2;ctx.strokeRect(-len/2-2,-wid/2-2,len+4,wid+4)}
+ ctx.restore();
+}
+function drawRoad(){
+ ctx.fillStyle="#343a40";ctx.fillRect(0,0,W,H);
+ for(let c=0;c<5;c++){let x=c*W/5;ctx.strokeStyle="#e5e5e588";ctx.lineWidth=2;ctx.setLineDash([12,8]);ctx.beginPath();ctx.moveTo(x+W/10,70);ctx.lineTo(x+W/10,H-20);ctx.stroke()}
+ ctx.setLineDash([]);ctx.strokeStyle="#ffffff30";ctx.lineWidth=3;ctx.setLineDash([30,25]);ctx.beginPath();ctx.moveTo(0,H*.72);ctx.lineTo(W,H*.72);ctx.stroke();ctx.setLineDash([]);
+ ctx.fillStyle="#244b38";ctx.fillRect(0,0,W,48);ctx.fillRect(0,H-12,W,12);
+ ctx.fillStyle="#dce7e1";ctx.font="bold 15px Arial";ctx.fillText("PARKING ZONE",15,30);
+ ctx.save();ctx.translate(target.x,target.y);ctx.strokeStyle="#ffe600";ctx.lineWidth=4;ctx.setLineDash([10,7]);ctx.strokeRect(-target.w/2,-target.h/2,target.w,target.h);ctx.setLineDash([]);ctx.fillStyle="#ffe600";ctx.font="bold 32px Arial";ctx.textAlign="center";ctx.fillText("P",0,10);ctx.restore();
+}
+function draw(){drawRoad();cars.forEach(c=>drawCar(c.x,c.y,c.a,c.color,c.length,c.width));drawCar(player.x,player.y,player.a,player.color,48,25,true)}
+function collision(x,y){if(x<25||x>W-25||y<65||y>H-25)return true;for(let c of cars)if(Math.hypot(x-c.x,y-c.y)<34)return true;return false}
+function update(dt){
+ if(!running)return;
+ let ox=player.x,oy=player.y,oa=player.a;
+ let up=keys.ArrowUp||keys.w||keys.W,down=keys.ArrowDown||keys.s||keys.S,left=keys.ArrowLeft||keys.a||keys.A,right=keys.ArrowRight||keys.d||keys.D;
+ if(up)player.speed+=.16*dt*60;else if(down)player.speed-=.16*dt*60;else player.speed*=Math.pow(.97,dt*60);
+ player.speed=Math.max(-3,Math.min(5,player.speed));
+ if(Math.abs(player.speed)>.15){let dir=player.speed>0?1:-1;if(left)player.a-=.045*dt*60*dir;if(right)player.a+=.045*dt*60*dir}
+ player.x+=Math.cos(player.a)*player.speed*dt*60;player.y+=Math.sin(player.a)*player.speed*dt*60;
+ if(collision(player.x,player.y)){player.x=ox;player.y=oy;player.a=oa;player.speed=0;document.getElementById("message").textContent="⚠️ Ehtiyot bo‘l! Mashinaga urilding!"}
+ timer+=dt;if(timer>=1){seconds++;timer=0;document.getElementById("time").textContent=seconds}
+ if(Math.hypot(player.x-target.x,player.y-target.y)<23&&Math.abs(player.speed)<.8){
+  won=true;running=false;score+=100+Math.max(0,100-seconds);
+  document.getElementById("score").textContent=score;document.getElementById("message").textContent="🏆 AJOYIB! PARKOVKA BAJARILDI!";
+  document.querySelector("#play").textContent="KEYINGI BOSQICH";document.querySelector("#start").classList.remove("hidden");
+  document.querySelector(".panel h1").textContent="🏆 LEVEL "+level+" TUGADI!";
+  document.querySelector(".panel p").textContent="Ball: "+score+" | Vaqt: "+seconds+" soniya";
+ }
+}
+function loop(t){let dt=Math.min((t-last)/1000,.04);last=t;update(dt);draw();requestAnimationFrame(loop)}
+document.addEventListener("keydown",e=>{if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();keys[e.key]=true});
+document.addEventListener("keyup",e=>keys[e.key]=false);
+document.querySelectorAll("[data-key]").forEach(b=>{let k=b.dataset.key;b.addEventListener("pointerdown",e=>{e.preventDefault();keys[k]=true});["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,()=>keys[k]=false))});
+document.getElementById("play").onclick=()=>{
+ if(won){level++;if(level>10){level=1;score=0}}
+ won=false;seconds=0;timer=0;
+ document.getElementById("level").textContent=level;document.getElementById("score").textContent=score;document.getElementById("time").textContent=0;
+ document.getElementById("message").textContent="🅿️ Sariq joyga mashinani qo‘y!";
+ document.querySelector(".panel h1").textContent="🚘 CAR PARKING PRO";
+ document.querySelector(".panel p").textContent="Yaxshi parkovka qil!";
+ document.getElementById("play").textContent="O‘YINNI BOSHLASH";
+ newLevel();running=true;document.getElementById("start").classList.add("hidden");
+};
+newLevel();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
